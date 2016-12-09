@@ -14,7 +14,7 @@ import hashlib as h
 
 class Db(object):
     def __init__(self):
-        self.conn = sqlite3.connect(":memory:")
+        self.conn = sqlite3.connect(":memory:", check_same_thread=False)
         self.vt = self.conn.cursor()
 
     def write(self, query):
@@ -71,7 +71,7 @@ class EQL(Db):
                     if req.status_code == 200:
                         self.write("INSERT INTO lb VALUES ('{0}', '{1}', '{2}')".format(server, "up", weight))
                     else:
-                        self.logger.log_save("EQL", "ERROR", "{0} Sunucusu down.".format(server))
+                        self.logger.log_save("EQL", "ERROR", "{0} Sunucusu down.Status kodu = {1}".format(server, req.status_code))
                         self.write("INSERT INTO lb VALUES ('{0}', '{1}', '{2}')".format(server, "down", weight))
                 except requests.exceptions.Timeout:
                     self.logger.log_save("EQL", "ERROR", "{0} Sunucusu down.".format(server))

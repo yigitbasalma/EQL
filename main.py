@@ -33,7 +33,7 @@ def cache(param):
         
         
 @app.route("/static<regex('.*'):param>")
-def cache_(param):
+def static_cache(param):
     rsp = eql.route_request("/static" + param, from_file=True)
     if rsp[0]:
         return Response(rsp[1], mimetype=rsp[2])
