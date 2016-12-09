@@ -1,6 +1,8 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+import re
+
 from flask import Flask, jsonify, abort, make_response, request, send_file, Response
 from source import eql, LogMaster
 from werkzeug.routing import BaseConverter
@@ -8,7 +10,7 @@ from werkzeug.routing import BaseConverter
 
 app = Flask(__name__)
 logger = LogMaster.Logger("REST_SERVICE", "/EQL/source/config.cfg")
-eql = eql.EQL(logger)
+eql = eql.EQL(logger, clustered=True, with_static=True)
 
 
 class RegexConverter(BaseConverter):
@@ -22,7 +24,8 @@ app.url_map.converters['regex'] = RegexConverter
 
 @app.route("/<regex('.*'):param>")
 def cache(param):
-    rsp = eql.route_request(param)
+    url = re.sub("a1", "/imgoptimizer/t", param)
+    rsp = eql.route_request(url)
     if rsp[0]:
         return Response(rsp[1], mimetype=rsp[2])
     else:
@@ -31,7 +34,7 @@ def cache(param):
         
 @app.route("/static<regex('.*'):param>")
 def cache_(param):
-    rsp = eql.route_request("/static" + param)
+    rsp = eql.route_request("/static" + param, from_file=True)
     if rsp[0]:
         return Response(rsp[1], mimetype=rsp[2])
     else:
