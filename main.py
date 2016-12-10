@@ -10,7 +10,7 @@ from werkzeug.routing import BaseConverter
 
 app = Flask(__name__)
 logger = LogMaster.Logger("REST_SERVICE", "/EQL/source/config.cfg")
-eql = eql.EQL(logger, clustered=True, with_static=True)
+eql = eql.EQL(logger, clustered=True, with_static=True, watcher=True)
 
 
 class RegexConverter(BaseConverter):

@@ -2,12 +2,14 @@
 # -*- coding: utf-8 -*-
 
 from couchbase.bucket import Bucket
+from multiprocessing import Process
 
 import requests
 import datetime
 import ConfigParser
 import couchbase
 import sqlite3
+import time
 
 import hashlib as h
 
@@ -44,10 +46,6 @@ class EQL(Db):
         self.server = self.config.get("env", "server")
         self.clustered = clustered
         self.timeout = self.config.get("env", "timeout")
-        if watcher:
-            self.watcher_bucket = Bucket("couchbase://{0}/{1}".\
-                                         format(self.config.get("env", "cbhost"),
-                                                self.config.get("env", "watcher_bucket")))
         if clustered:
             Db.__init__(self)
             self.write("CREATE TABLE lb(HOST VARCHAR(100) PRIMARY KEY, STATUS VARCHAR(20), WEIGHT INT(3) DEFAULT '0')")
@@ -59,28 +57,59 @@ class EQL(Db):
                 "js": "application/javascript"
             }
             self.root_directory = str(self.config.get("env", "root_directory"))
+        if watcher:
+            self.watcher_bucket = Bucket("couchbase://{0}/{1}".\
+                                         format(self.config.get("env", "cbhost"),
+                                                self.config.get("env", "watcher_bucket")))
+            check_interval = int(self.config.get("env", "check_interval"))
+            p = Process(target=self._health_check_cluster, name="EQL_Watcher", kwargs={"check_interval":check_interval})
+            p.start()
 
-    def _health_check_cluster(self, first=False):
+    def _health_check_cluster(self, first=False, check_interval=3):
         if first:
             cluster = self.config.get("env", "cluster").split(",")
             url = self.config.get("env", "health_check_url")
             weight = 1
             for server in cluster:
+                status = None
                 try:
                     req = requests.get("http://{0}{1}".format(server, url), timeout=int(self.timeout))
-                    if req.status_code == 200:
-                        self.write("INSERT INTO lb VALUES ('{0}', '{1}', '{2}')".format(server, "up", weight))
-                    else:
-                        self.logger.log_save("EQL", "ERROR", "{0} Sunucusu down.Status kodu = {1}".format(server, req.status_code))
-                        self.write("INSERT INTO lb VALUES ('{0}', '{1}', '{2}')".format(server, "down", weight))
+                    status = "up" if req.status_code == 200 else "down"
                 except requests.exceptions.Timeout:
-                    self.logger.log_save("EQL", "ERROR", "{0} Sunucusu down.".format(server))
-                    self.write("INSERT INTO lb VALUES ('{0}', '{1}', '{2}')".format(server, "down", weight))
+                    status = "down"
                 except requests.exceptions.ConnectionError:
-                    self.logger.log_save("EQL", "ERROR", "{0} Sunucusu down.".format(server))
-                    self.write("INSERT INTO lb VALUES ('{0}', '{1}', '{2}')".format(server, "down", weight))
+                    status = "down"
                 finally:
+                    if status == "down":
+                        self.logger.log_save("EQL", "ERROR", "{0} Sunucusu down.".format(server))
+                    self.write("INSERT INTO lb VALUES ('{0}', '{1}', '{2}')".format(server, status, weight))
                     weight += 1
+            return True
+            
+        while True:
+            config = ConfigParser.ConfigParser()
+            config.read("/EQL/source/config.cfg")
+            cluster = config.get("env", "cluster").split(",")
+            url = config.get("env", "health_check_url")
+            weight = 1
+            for server in cluster:
+                status = None
+                try:
+                    req = requests.get("http://{0}{1}".format(server, url), timeout=int(self.timeout))
+                    status = "up" if req.status_code == 200 else "down"
+                except requests.exceptions.Timeout:
+                    status = "down"
+                except requests.exceptions.ConnectionError:
+                    status = "down"
+                finally:
+                    try:
+                        if status == "down":
+                            self.logger.log_save("EQL", "ERROR", "{0} Sunucusu down.".format(server))
+                        self.write("INSERT INTO lb VALUES ('{0}', '{1}', '{2}')".format(server, status, weight))
+                    except sqlite3.IntegrityError:
+                        self.write("UPDATE lb SET STATUS='{0}', WEIGHT='{1}' WHERE HOST='{2}'".format(status, weight, server))
+                    weight += 1
+            time.sleep(int(check_interval))
 
     def _is_cached(self, url):
         urls = h.md5(url).hexdigest()
@@ -105,8 +134,8 @@ class EQL(Db):
                         return False, int(500)
             if req.status_code == 200:
                 self._cache_item(urls, req.content)
-                self._statistic(urls, req.headers.get('content-type_'))
-                return True, req.content, req.headers.get('content-type_')
+                self._statistic(urls, req.headers.get('content-type'))
+                return True, req.content, req.headers.get('content-type')
             else:
                 return False, int(req.status_code)
 
