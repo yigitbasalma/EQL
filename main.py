@@ -59,4 +59,4 @@ def internal_server_error(error):
 
 
 if __name__ == '__main__':
-    app.run("127.0.0.1", 5000, debug=True, threaded=True)
+    app.run("127.0.0.1", 5000, debug=False, processes=4)

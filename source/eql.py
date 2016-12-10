@@ -45,7 +45,7 @@ class EQL(Db):
                                               self.config.get("env", "statistic_bucket")))
         self.server = self.config.get("env", "server")
         self.clustered = clustered
-        self.timeout = self.config.get("env", "timeout")
+        self.timeout = float(self.config.get("env", "timeout"))
         if clustered:
             Db.__init__(self)
             self.write("CREATE TABLE lb(HOST VARCHAR(100) PRIMARY KEY, STATUS VARCHAR(20), WEIGHT INT(3) DEFAULT '0')")
@@ -73,7 +73,7 @@ class EQL(Db):
             for server in cluster:
                 status = None
                 try:
-                    req = requests.get("http://{0}{1}".format(server, url), timeout=int(self.timeout))
+                    req = requests.get("http://{0}{1}".format(server, url), timeout=self.timeout)
                     status = "up" if req.status_code == 200 else "down"
                 except requests.exceptions.Timeout:
                     status = "down"
@@ -95,7 +95,7 @@ class EQL(Db):
             for server in cluster:
                 status = None
                 try:
-                    req = requests.get("http://{0}{1}".format(server, url), timeout=int(self.timeout))
+                    req = requests.get("http://{0}{1}".format(server, url), timeout=self.timeout)
                     status = "up" if req.status_code == 200 else "down"
                 except requests.exceptions.Timeout:
                     status = "down"
@@ -116,10 +116,12 @@ class EQL(Db):
         try:
             values = self.cache_bucket.get(urls).value
             type_ = self._statistic(urls, r_turn=True)
+            if type_ is None:
+                raise ValueError()
             return True, values, type_
-        except couchbase.exceptions.NotFoundError:
+        except (couchbase.exceptions.NotFoundError, ValueError):
             try:
-                req = requests.get("http://{0}{1}".format(self.server, url), timeout=int(self.timeout))
+                req = requests.get("http://{0}{1}".format(self.server, url), timeout=self.timeout)
             except requests.exceptions.Timeout:
                 if not self.clustered:
                     self.logger.log_save("EQL", "CRITIC", "Backend server timeout hatası aldı.")
@@ -127,8 +129,11 @@ class EQL(Db):
                 while True:
                     pool = self._get_server()
                     try:
-                        req = requests.get("http://{0}{1}".format(pool.next(), url), timeout=int(self.timeout))
-                        if req.status_code == 200: break
+                        try:
+                            req = requests.get("http://{0}{1}".format(pool.next(), url), timeout=self.timeout)
+                            if req.status_code == 200: break
+                        except:
+                            pass
                     except StopIteration:
                         self.logger.log_save("EQL", "CRITIC", "Tüm backend serverlar timeout hatası aldı.")
                         return False, int(500)
@@ -155,6 +160,9 @@ class EQL(Db):
             obj = [count, timestamp, type_]
             self.statistic_bucket.replace(url, obj)
         except couchbase.exceptions.NotFoundError:
+            if r_turn:
+                if type_ is None:
+                    return False
             count = 1
             obj = [count, datetime.datetime.now().strftime("%Y-%m-%d %H:%I:%S"), type_]
             self.statistic_bucket.insert(url, obj)
