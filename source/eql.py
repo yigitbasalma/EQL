@@ -39,7 +39,7 @@ class EQL(Db):
         self.config = ConfigParser.ConfigParser()
         self.config.read("/EQL/source/config.cfg")
         self.cache_bucket = Bucket("couchbase://{0}/{1}".\
-                                   format(self.config.get("env", "cbhost"), self.config.get("env", "cache_bucket")))
+                                   format(self.config.get("env", "cbhost"), self.config.get("env", "cache_bucket")), lockmode=2)
         self.statistic_bucket = Bucket("couchbase://{0}/{1}".\
                                        format(self.config.get("env", "cbhost"),
                                               self.config.get("env", "statistic_bucket")))
@@ -58,9 +58,6 @@ class EQL(Db):
             }
             self.root_directory = str(self.config.get("env", "root_directory"))
         if watcher:
-            self.watcher_bucket = Bucket("couchbase://{0}/{1}".\
-                                         format(self.config.get("env", "cbhost"),
-                                                self.config.get("env", "watcher_bucket")))
             check_interval = int(self.config.get("env", "check_interval"))
             p = Process(target=self._health_check_cluster, name="EQL_Watcher", kwargs={"check_interval":check_interval})
             p.start()
