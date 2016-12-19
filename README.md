@@ -32,17 +32,21 @@ Konfigürasyon parametreleri ve anlamları aşağıda listelenmiştir.
 + [log]
   + path : Log dosyasının oluşacağı klasörü belirtir.
   
-  Örnek örnekleme aşağıda yer almaktadır.
+  Örnek örnekleme aşağıda yer almaktadır.Sınıf, ilk parametre olarak, scriptin başında oluşturulan logger objesini bekler.eql örneklenmeden önce mutlaka loggger sınıfı örneklenmelidir.
   ```
   import eql
+  import LogMaster
+  
+  # Logger sınıfı
+  logger = LogMaster.Logger("<dosya_adı>", "/path/to/<config_cfg_dosyası>")
   # En sade haliyle örnekleme
-  eql = eql.EQL()
+  eql = eql.EQL(logger)
   # Cluster ile örnekleme
-  eql = eql.EQL(clustered=True)
+  eql = eql.EQL(logger, clustered=True)
   # Cluster + watcher
-  eql = eql.EQL(clustered=True, watcher=True)
+  eql = eql.EQL(logger, clustered=True, watcher=True)
   # Cluster + watcher + statik dosya desteği
-  eql = eql.EQL(clustered=True, with_static=True, watcher=True)
+  eql = eql.EQL(logger, clustered=True, with_static=True, watcher=True)
   
   # Çalıştırmak için sadece istek yapılan adresi parametre olarak verin
   eql.route_request(url)
