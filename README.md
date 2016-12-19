@@ -38,11 +38,11 @@ Konfigürasyon parametreleri ve anlamları aşağıda listelenmiştir.
   # En sade haliyle örnekleme
   eql = eql.EQL()
   # Cluster ile örnekleme
-  eql = eql.EQL(logger, clustered=True)
+  eql = eql.EQL(clustered=True)
   # Cluster + watcher
-  eql = eql.EQL(logger, clustered=True, watcher=True)
+  eql = eql.EQL(clustered=True, watcher=True)
   # Cluster + watcher + statik dosya desteği
-  eql = eql.EQL(logger, clustered=True, with_static=True, watcher=True)
+  eql = eql.EQL(clustered=True, with_static=True, watcher=True)
   
   # Çalıştırmak için sadece istek yapılan adresi parametre olarak verin
   eql.route_request(url)
