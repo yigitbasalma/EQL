@@ -31,3 +31,19 @@ Konfigürasyon parametreleri ve anlamları aşağıda listelenmiştir.
   + check_interval : Sunucuların kaç saniyede bir health check yapacağını belirtir.Varsayılan değer 3 saniyedir.
 + [log]
   + path : Log dosyasının oluşacağı klasörü belirtir.
+  
+  Örnek örnekleme aşağıda yer almaktadır.
+  ```
+  import eql
+  # En sade haliyle örnekleme
+  eql = eql.EQL()
+  # Cluster ile örnekleme
+  eql = eql.EQL(logger, clustered=True)
+  # Cluster + watcher
+  eql = eql.EQL(logger, clustered=True, watcher=True)
+  # Cluster + watcher + statik dosya desteği
+  eql = eql.EQL(logger, clustered=True, with_static=True, watcher=True)
+  
+  # Çalıştırmak için sadece istek yapılan adresi parametre olarak verin
+  eql.route_request(url)
+  ```
