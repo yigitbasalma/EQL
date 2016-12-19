@@ -31,7 +31,6 @@ Konfigürasyon parametreleri ve anlamları aşağıda listelenmiştir.
   + check_interval : Sunucuların kaç saniyede bir health check yapacağını belirtir.Varsayılan değer 3 saniyedir.
 + [log]
   + path : Log dosyasının oluşacağı klasörü belirtir.
-  
   Örnek örnekleme aşağıda yer almaktadır.Sınıf, ilk parametre olarak, scriptin başında oluşturulan logger objesini bekler.eql örneklenmeden önce mutlaka loggger sınıfı örneklenmelidir.
   ```
   import eql
@@ -51,3 +50,5 @@ Konfigürasyon parametreleri ve anlamları aşağıda listelenmiştir.
   # Çalıştırmak için sadece istek yapılan adresi parametre olarak verin
   eql.route_request(url)
   ```
+  
+  Sistem clustered özelliği ile açıldığında bellekte bir sqlite tablosu oluşur ve cluster durumu burada saklanır.Eğer watcher özelliği açılmamışsa aktif cluster bilgisi ve cluster da yer alan sunucuların durumu bir defaya mahsuu kontrol edilir ve buraya işlenir.Bu işlemden sonra eğer bir sebepten sunucular down olursa script bundan haberdar olmayacaktır.Bu nedenle clustered parametresiyle birlikte watcher parametresini de kullanmanız önerilir.Bu parametreyle birlikte, belirlenen aralıklar sunucular kontrol edilir ve down olan sunucularınıza trafik gitmez.Ayrıca sunucu durumunuzu loglardan takip edebilirsiniz:
