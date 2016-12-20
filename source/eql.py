@@ -65,6 +65,7 @@ class EQL(Db):
     def _health_check_cluster(self, first=False, check_interval=3):
         if first:
             cluster = self.config.get("env", "cluster").split(",")
+            cluster.append(self.server)
             url = self.config.get("env", "health_check_url")
             weight = 1
             for server in cluster:
@@ -84,9 +85,10 @@ class EQL(Db):
             return True
             
         while True:
-            config = ConfigParser.ConfigParser()
-            config.read("/EQL/source/config.cfg")
-            cluster = config.get("env", "cluster").split(",")
+            #config = ConfigParser.ConfigParser()
+            #config.read("/EQL/source/config.cfg")
+            #cluster = config.get("env", "cluster").split(",")
+            cluster = [i[0] for i in self.db.readt("SELECT HOST FROM lb")]
             url = config.get("env", "health_check_url")
             weight = 1
             for server in cluster:
@@ -127,7 +129,8 @@ class EQL(Db):
                     pool = self._get_server()
                     try:
                         try:
-                            req = requests.get("http://{0}{1}".format(pool.next(), url), timeout=self.timeout)
+                            self.server = pool.next()
+                            req = requests.get("http://{0}{1}".format(self.server, url), timeout=self.timeout)
                             if req.status_code == 200: break
                         except:
                             pass
