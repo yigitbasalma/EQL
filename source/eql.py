@@ -42,7 +42,7 @@ class EQL(Db):
                                    format(self.config.get("env", "cbhost"), self.config.get("env", "cache_bucket")), lockmode=2)
         self.statistic_bucket = Bucket("couchbase://{0}/{1}".\
                                        format(self.config.get("env", "cbhost"),
-                                              self.config.get("env", "statistic_bucket")))
+                                              self.config.get("env", "statistic_bucket")), lockmode=2)
         self.server = self.config.get("env", "server")
         self.clustered = clustered
         self.timeout = float(self.config.get("env", "timeout"))
