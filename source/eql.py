@@ -89,7 +89,7 @@ class EQL(Db):
             #config.read("/EQL/source/config.cfg")
             #cluster = config.get("env", "cluster").split(",")
             cluster = [i[0] for i in self.readt("SELECT HOST FROM lb")]
-            url = config.get("env", "health_check_url")
+            url = self.config.get("env", "health_check_url")
             weight = 1
             for server in cluster:
                 status = None
