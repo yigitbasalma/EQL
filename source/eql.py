@@ -39,13 +39,15 @@ class EQL(Db):
         self.config = ConfigParser.ConfigParser()
         self.config.read("/EQL/source/config.cfg")
         self.cache_bucket = Bucket("couchbase://{0}/{1}".\
-                                   format(self.config.get("env", "cbhost"), self.config.get("env", "cache_bucket")), lockmode=2)
+                                   format(self.config.get("env", "cbhost"), self.config.get("env", "cache_bucket")),
+                                   lockmode=2)
         self.statistic_bucket = Bucket("couchbase://{0}/{1}".\
                                        format(self.config.get("env", "cbhost"),
                                               self.config.get("env", "statistic_bucket")), lockmode=2)
         self.server = self.config.get("env", "server")
         self.clustered = clustered
         self.timeout = float(self.config.get("env", "timeout"))
+        self.img_file_expire = int(self.config.get("env", "img_file_expire")) * 24 * 60 * 60
         if clustered:
             Db.__init__(self)
             self.write("CREATE TABLE lb(HOST VARCHAR(100) PRIMARY KEY, STATUS VARCHAR(20), WEIGHT INT(3) DEFAULT '0')")
@@ -57,9 +59,11 @@ class EQL(Db):
                 "js": "application/javascript"
             }
             self.root_directory = str(self.config.get("env", "root_directory"))
+            self.static_file_expire = int(self.config.get("env", "static_file_expire")) * 24 * 60 * 60
         if watcher:
             check_interval = int(self.config.get("env", "check_interval"))
-            p = Process(target=self._health_check_cluster, name="EQL_Watcher", kwargs={"check_interval":check_interval})
+            p = Process(target=self._health_check_cluster, name="EQL_Watcher",
+                        kwargs={"check_interval": check_interval})
             p.start()
 
     def _health_check_cluster(self, first=False, check_interval=3):
@@ -83,11 +87,11 @@ class EQL(Db):
                     self.write("INSERT INTO lb VALUES ('{0}', '{1}', '{2}')".format(server, status, weight))
                     weight += 1
             return True
-            
+
         while True:
-            #config = ConfigParser.ConfigParser()
-            #config.read("/EQL/source/config.cfg")
-            #cluster = config.get("env", "cluster").split(",")
+            # config = ConfigParser.ConfigParser()
+            # config.read("/EQL/source/config.cfg")
+            # cluster = config.get("env", "cluster").split(",")
             cluster = [i[0] for i in self.readt("SELECT HOST FROM lb")]
             url = self.config.get("env", "health_check_url")
             weight = 1
@@ -106,7 +110,8 @@ class EQL(Db):
                             self.logger.log_save("EQL", "ERROR", "{0} Sunucusu down.".format(server))
                         self.write("INSERT INTO lb VALUES ('{0}', '{1}', '{2}')".format(server, status, weight))
                     except sqlite3.IntegrityError:
-                        self.write("UPDATE lb SET STATUS='{0}', WEIGHT='{1}' WHERE HOST='{2}'".format(status, weight, server))
+                        self.write(
+                            "UPDATE lb SET STATUS='{0}', WEIGHT='{1}' WHERE HOST='{2}'".format(status, weight, server))
                     weight += 1
             time.sleep(int(check_interval))
 
@@ -144,15 +149,22 @@ class EQL(Db):
             else:
                 return False, int(req.status_code)
 
-    def _cache_item(self, url, img):
+    def _cache_item(self, url, img, static_file=False):
         try:
-            self.cache_bucket.insert(url, img, format=couchbase.FMT_BYTES)
+            if static_file:
+                self.cache_bucket.insert(url, img, format=couchbase.FMT_BYTES, ttl=self.static_file_expire)
+            else:
+                self.cache_bucket.insert(url, img, format=couchbase.FMT_BYTES, ttl=self.img_file_expire)
         except couchbase.exceptions.KeyExistsError:
             pass
         finally:
             return True
 
-    def _statistic(self, url, type_=None, r_turn=False):
+    def _statistic(self, url, type_=None, r_turn=False, static_file=False):
+        if static_file:
+            expire = self.static_file_expire
+        else:
+            expire = self.img_file_expire
         try:
             values = self.statistic_bucket.get(url).value
             count, timestamp, type_ = values[0], values[1], values[2]
@@ -165,7 +177,7 @@ class EQL(Db):
                     return False
             count = 1
             obj = [count, datetime.datetime.now().strftime("%Y-%m-%d %H:%I:%S"), type_]
-            self.statistic_bucket.insert(url, obj)
+            self.statistic_bucket.insert(url, obj, ttl=int(expire))
         finally:
             if r_turn:
                 return type_
@@ -193,8 +205,8 @@ class EQL(Db):
                     return False, int(500)
                 data = file_.read()
                 type_ = self.mime_type[url.split(".")[-1]]
-                self._cache_item(urls, data)
-                self._statistic(urls, type_)
+                self._cache_item(urls, data, static_file=True)
+                self._statistic(urls, type_, static_file=True)
                 return True, data, type_
 
         return self._is_cached(url)
