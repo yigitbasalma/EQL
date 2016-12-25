@@ -52,3 +52,6 @@ Konfigürasyon parametreleri ve anlamları aşağıda listelenmiştir.
   ```
   
   Sistem **clustered** özelliği ile açıldığında bellekte bir sqlite tablosu oluşur ve cluster durumu burada saklanır.Eğer **watcher** özelliği açılmamışsa aktif cluster bilgisi ve cluster da yer alan sunucuların durumu bir defaya mahsuu kontrol edilir ve buraya işlenir.Bu işlemden sonra eğer bir sebepten sunucular down olursa script bundan haberdar olmayacaktır.Bu nedenle **clustered** parametresiyle birlikte **watcher** parametresini de kullanmanız önerilir.Bu parametreyle birlikte, belirlenen aralıklar sunucular kontrol edilir ve down olan sunucularınıza trafik gitmez.Ayrıca sunucu durumunuzu loglardan takip edebilirsiniz:
+
+## Version 3.0 ( Beta )
+Uygulamaya eklenen veri merkezi özelliğiyle, tam anlamıyla bir CDN özelliği kazandırılmaya çalışılmıştır.Şuan için tasarım ve bir miktar test kodu olarak hazır olan özellik, önümüzdeki dönemlerde test edilecektir.Şuan için yapılan eklentilerin, mevcut çalışma sistemine olumsuz bir etkis
