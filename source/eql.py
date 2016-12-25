@@ -3,6 +3,7 @@
 
 from couchbase.bucket import Bucket
 from multiprocessing import Process
+from geoip import geolite2
 
 import requests
 import datetime
@@ -15,8 +16,11 @@ import hashlib as h
 
 
 class Db(object):
-    def __init__(self):
-        self.conn = sqlite3.connect(":memory:", check_same_thread=False)
+    def __init__(self, router_mode=False):
+        if not router_mode:
+            self.conn = sqlite3.connect(":memory:", check_same_thread=False)
+        else:
+            self.conn = sqlite3.connect("/EQL/source/country_code.db", check_same_thread=False)
         self.vt = self.conn.cursor()
 
     def write(self, query):
@@ -34,9 +38,21 @@ class Db(object):
 
 
 class EQL(Db):
-    def __init__(self, logger, watcher=False, clustered=False, with_static=False):
+    def __init__(self, logger, router_mod=False, watcher=False, clustered=False, with_static=False):
         self.logger = logger
         self.config = ConfigParser.ConfigParser()
+        if router_mod:
+            self.config.read("/EQL/source/cdn.cfg")
+            self.edge_locations = self.config.get("env", "edge_locations").split(",")
+            self.default_edge = self.config.get("env", "default_edge")
+            Db.__init__(self, router_mode=True)
+            self.write("CREATE TABLE edge_status(SERVER VARCHAR(200) PRIMARY KEY,STATUS VARCHAR(50), REGION VARCHAR(5))")
+            check_interval = int(self.config.get("env", "edge_check_interval"))
+            p = Process(target=self._health_check_edge_server, name="EQL_Watcher",
+                        kwargs={"check_interval": check_interval})
+            p.start()
+            self.router_mod = True
+            return True
         self.config.read("/EQL/source/config.cfg")
         self.cache_bucket = Bucket("couchbase://{0}/{1}".\
                                    format(self.config.get("env", "cbhost"), self.config.get("env", "cache_bucket")),
@@ -89,9 +105,6 @@ class EQL(Db):
             return True
 
         while True:
-            # config = ConfigParser.ConfigParser()
-            # config.read("/EQL/source/config.cfg")
-            # cluster = config.get("env", "cluster").split(",")
             cluster = [i[0] for i in self.readt("SELECT HOST FROM lb")]
             url = self.config.get("env", "health_check_url")
             weight = 1
@@ -192,6 +205,9 @@ class EQL(Db):
 
     def route_request(self, url, from_file=False):
         # return status, data, mime type
+        if self.router_mod:
+            print "router_mod açıkken bu özellik kullanılamaz."
+            sys.exit(1)
         if from_file:
             urls = h.md5(url).hexdigest()
             try:
@@ -210,3 +226,38 @@ class EQL(Db):
                 return True, data, type_
 
         return self._is_cached(url)
+        
+    # router_mod işlemleri başlangıcı
+    
+    def _health_check_edge_server(self, check_interval=3):
+        while True:
+            for edge_location in self.edge_locations:
+                health_check_url = self.config.get(edge_location, "health_check_url")
+                timeout = self.config.get(edge_location, "timeout")
+                for server in self.config.get(edge_location, "servers").split(","):
+                    try:
+                        req = requests.get("http://{0}{1}".format(server, health_check_url))
+                        status = "up" if req.status_code == 200 else "down"
+                    except requests.exceptions.Timeout:
+                        status = "down"
+                    except requests.exceptions.ConnectionError:
+                        status = "down"
+                    finally:
+                        try:
+                            if status == "down":
+                                self.logger.log_save("EQL", "ERROR", "{0} Sunucusu down.".format(server))
+                            self.write("INSERT INTO edge_status VALUES ('{0}', '{1}', '{2}')".format(server, status, edge_location))
+                        except sqlite3.IntegrityError:
+                            self.write("UPDATE edge_status STATUS='{0}', REGION='{2}' WHERE SERVER='{1}'".format(status, server, edge_location))
+            time.sleep(int(check_interval))
+    
+    def _get_best_edge(self, country_code):
+        request_from = self.readt("SELECT CONTINENT FROM country_code WHERE CC='{0}'".format(country_code))[0][0]
+        region = request_from if request_from in self.edge_locations else self.default_edge
+        return self.readt("SELECT SERVER FROM edge_status WHERE STATUS='up' AND REGION='{0}'".format(region))[0][0]
+        
+    def route_to_best_edge(origin_ip):
+        origin = geolite2(origin_ip)
+        if origin is not None:
+            return self._get_best_edge(origin.country)
+        return self._get_best_edge(self.default_edge)
