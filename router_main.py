@@ -26,7 +26,7 @@ def cache(param):
     client = request.headers.get("X-Forwarded-For")
     rsp = eql.route_to_best_edge(param, client)
     if rsp[0]:
-        return redirect(rsp[1], code=301)
+        return redirect(rsp[1], code=302)
 
 
 @app.errorhandler(404)

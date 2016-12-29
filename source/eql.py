@@ -16,11 +16,8 @@ import hashlib as h
 
 
 class Db(object):
-    def __init__(self, router_mode=False):
-        if not router_mode:
-            self.conn = sqlite3.connect(":memory:", check_same_thread=False)
-        else:
-            self.conn = sqlite3.connect("/EQL/source/country_code.db", check_same_thread=False)
+    def __init__(self,method, router_mode=False):
+        self.conn = sqlite3.connect(method, check_same_thread=False)
         self.vt = self.conn.cursor()
 
     def write(self, query):
@@ -39,36 +36,39 @@ class Db(object):
 
 class EQL(Db):
     def __init__(self, logger, router_mod=False, watcher=False, clustered=False, with_static=False):
-        if router_mod and watcher or clustered or with_static:
-            raise RuntimeError("router_mod açıkken diğer modlar kullanılamaz.")
+        if router_mod:
+            if watcher or clustered or with_static:
+                raise RuntimeError("router_mod açıkken diğer modlar kullanılamaz.")
         self.logger = logger
         self.config = ConfigParser.ConfigParser()
         if router_mod:
             self.config.read("/EQL/source/cdn.cfg")
             self.edge_locations = self.config.get("env", "edge_locations").split(",")
             self.default_edge = self.config.get("env", "default_edge")
-            self.cc_db = Db(router_mode=True)
-            Db.__init__(self)
+            self.cc_db = Db("/EQL/source/country_code.db", router_mode=True)
+            Db.__init__(self, "/EQL/source/loadbalancer.db")
             self.write(
-                "CREATE TABLE edge_status(SERVER VARCHAR(200) PRIMARY KEY,STATUS VARCHAR(50), REGION VARCHAR(5))")
+                "DELETE FROM edge_status")
             check_interval = int(self.config.get("env", "edge_check_interval"))
             p = Process(target=self._health_check_edge_server, name="EQL_Watcher",
                         kwargs={"check_interval": check_interval})
             p.start()
             self.router_mod = True
-        self.config.read("/EQL/source/config.cfg")
-        self.cache_bucket = Bucket("couchbase://{0}/{1}".\
-                                   format(self.config.get("env", "cbhost"), self.config.get("env", "cache_bucket")),
-                                   lockmode=2)
-        self.statistic_bucket = Bucket("couchbase://{0}/{1}".\
-                                       format(self.config.get("env", "cbhost"),
-                                              self.config.get("env", "statistic_bucket")), lockmode=2)
-        self.server = self.config.get("env", "server")
-        self.clustered = clustered
-        self.timeout = float(self.config.get("env", "timeout"))
-        self.img_file_expire = int(self.config.get("env", "img_file_expire")) * 24 * 60 * 60
+        if not router_mod:
+            self.router_mod = False
+            self.config.read("/EQL/source/config.cfg")
+            self.cache_bucket = Bucket("couchbase://{0}/{1}".\
+                                       format(self.config.get("env", "cbhost"), self.config.get("env", "cache_bucket")),
+                                       lockmode=2)
+            self.statistic_bucket = Bucket("couchbase://{0}/{1}".\
+                                           format(self.config.get("env", "cbhost"),
+                                                  self.config.get("env", "statistic_bucket")), lockmode=2)
+            self.server = self.config.get("env", "server")
+            self.clustered = clustered
+            self.timeout = float(self.config.get("env", "timeout"))
+            self.img_file_expire = int(self.config.get("env", "img_file_expire")) * 24 * 60 * 60
         if clustered:
-            Db.__init__(self)
+            Db.__init__(self, ":memory:")
             self.write("CREATE TABLE lb(HOST VARCHAR(100) PRIMARY KEY, STATUS VARCHAR(20), WEIGHT INT(3) DEFAULT '0')")
             self.clustered = True
             self._health_check_cluster(first=True)
@@ -236,7 +236,9 @@ class EQL(Db):
             for edge_location in self.edge_locations:
                 health_check_url = self.config.get(edge_location, "health_check_url")
                 timeout = self.config.get(edge_location, "timeout")
-                for server in self.config.get(edge_location, "servers").split(","):
+                cluster = self.config.get(edge_location, "servers").split(",")
+                for server in cluster:
+                    status = None
                     try:
                         req = requests.get("http://{0}{1}".format(server, health_check_url), timeout=float(timeout))
                         status = "up" if req.status_code == 200 else "down"
@@ -248,12 +250,9 @@ class EQL(Db):
                         try:
                             if status == "down":
                                 self.logger.log_save("EQL", "ERROR", "{0} Sunucusu down.".format(server))
-                            self.write("INSERT INTO edge_status VALUES ('{0}', '{1}', '{2}')".format(server, status,
-                                                                                                     edge_location))
+                            self.write("INSERT INTO edge_status VALUES ('{0}', '{1}', '{2}')".format(server, status, edge_location))
                         except sqlite3.IntegrityError:
-                            self.write("UPDATE edge_status SET STATUS='{0}', REGION='{2}' WHERE SERVER='{1}'".format(status,
-                                                                                                                    server,
-                                                                                                                 edge_location))
+                            self.write("UPDATE edge_status SET STATUS='{0}', REGION='{2}' WHERE SERVER='{1}'".format(status, server, edge_location))
             time.sleep(int(check_interval))
 
     def _get_best_edge(self, country_code):
@@ -264,5 +263,5 @@ class EQL(Db):
     def route_to_best_edge(self, url, origin_ip):
         origin = geolite2.lookup(origin_ip)
         if origin is not None:
-            return True, "http://{0}{1}".format(self._get_best_edge(origin.country), url)
-        return True, "http://{0}{1}".format(self._get_best_edge(self.default_edge), url)
+            return True, "http://{0}/{1}".format(self._get_best_edge(origin.country), url)
+        return True, "http://{0}/{1}".format(self._get_best_edge(self.default_edge), url)
