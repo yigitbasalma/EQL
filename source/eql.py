@@ -45,10 +45,15 @@ class EQL(Db):
             self.config.read("/EQL/source/cdn.cfg")
             self.edge_locations = self.config.get("env", "edge_locations").split(",")
             self.default_edge = self.config.get("env", "default_edge")
-            self.cc_db = Db("/EQL/source/country_code.db", router_mode=True)
-            Db.__init__(self, "/EQL/source/loadbalancer.db")
-            self.write(
-                "DELETE FROM edge_status")
+            continent_db = self.config.get("env", "continent_db")
+            lb_db = self.config.get("env", "lb_db")
+            self.cc_db = Db(continent_db, router_mode=True)
+            Db.__init__(self, lb_db)
+            try:
+                self.write(
+                "CREATE TABLE edge_status(SERVER VARCHAR(200) PRIMARY KEY,STATUS VARCHAR(50), REGION VARCHAR(5))")
+            except sqlite3.OperationalError:
+                self.write("DELETE FROM edge_status")
             check_interval = int(self.config.get("env", "edge_check_interval"))
             p = Process(target=self._health_check_edge_server, name="EQL_Watcher",
                         kwargs={"check_interval": check_interval})
@@ -68,8 +73,12 @@ class EQL(Db):
             self.timeout = float(self.config.get("env", "timeout"))
             self.img_file_expire = int(self.config.get("env", "img_file_expire")) * 24 * 60 * 60
         if clustered:
-            Db.__init__(self, ":memory:")
-            self.write("CREATE TABLE lb(HOST VARCHAR(100) PRIMARY KEY, STATUS VARCHAR(20), WEIGHT INT(3) DEFAULT '0')")
+            lb_file = self.condig.get("env", "lb_db")
+            Db.__init__(self, lb_file)
+            try:
+                self.write("CREATE TABLE lb(HOST VARCHAR(100) PRIMARY KEY, STATUS VARCHAR(20), WEIGHT INT(3) DEFAULT '0')")
+            except sqlite3.OperationalError:
+                self.write("DELETE FROM lb")
             self.clustered = True
             self._health_check_cluster(first=True)
         if with_static:
@@ -141,7 +150,7 @@ class EQL(Db):
             return True, values, type_
         except (couchbase.exceptions.NotFoundError, ValueError):
             try:
-                req = requests.get("http://{0}{1}".format(self.server, url), timeout=self.timeout)
+                req = requests.get("http://{0}/{1}".format(self.server, url), timeout=self.timeout)
             except requests.exceptions.Timeout:
                 if not self.clustered:
                     self.logger.log_save("EQL", "CRITIC", "Backend server timeout hatası aldı.")
@@ -151,7 +160,7 @@ class EQL(Db):
                     try:
                         try:
                             self.server = pool.next()
-                            req = requests.get("http://{0}{1}".format(self.server, url), timeout=self.timeout)
+                            req = requests.get("http://{0}/{1}".format(self.server, url), timeout=self.timeout)
                             if req.status_code == 200: break
                         except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
                             pass

@@ -24,7 +24,7 @@ app.url_map.converters['regex'] = RegexConverter
 
 @app.route("/<regex('.*'):param>")
 def cache(param):
-    url = re.sub("a1", "/imgoptimizer/t", param)
+    url = re.sub("a1", "imgoptimizer/t", param)
     rsp = eql.route_request(url)
     if rsp[0]:
         return Response(rsp[1], mimetype=rsp[2])
