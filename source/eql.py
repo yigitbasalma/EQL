@@ -87,6 +87,8 @@ class EQL(Db):
             self.root_directory = str(self.config.get("env", "root_directory"))
             self.static_file_expire = int(self.config.get("env", "static_file_expire")) * 24 * 60 * 60
         if watcher:
+            if not clustered:
+                raise RuntimeError("clustered parametresi açılmadan watcher kullanılamaz.")
             check_interval = int(self.config.get("env", "check_interval"))
             p = Process(target=self._health_check_cluster, name="EQL_Watcher",
                         kwargs={"check_interval": check_interval})

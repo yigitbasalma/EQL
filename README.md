@@ -29,6 +29,9 @@ Konfigürasyon parametreleri ve anlamları aşağıda listelenmiştir.
   + timeout : Backend serverlara yapılacak isteğin ne kadar süre sonra timeout isteği alacağını belirtir.
   + root_directory : Statik dosya içeriklerinin aranacağı ana path ( Eğer örnekleme sırasında "with_static=True" kullanılacaksa zorunludur. )
   + check_interval : Sunucuların kaç saniyede bir health check yapacağını belirtir.Varsayılan değer 3 saniyedir.
+  + static_file_expire : CSS, JS gibi dosyaların expire süresini belirtir.
+  + img_file_expire : İmaj dosyaları için expire süresini belirtir.( İlerleyen zamanlarda imaj türleri için sınırlama ve kontrol de getirilecektir. )
+  + lb_db : Cluster sunucularının durumlarının tutulacağı sqlite db dosyasıdır. ( Eğer örnekleme sırasında "clustered=True" veya "watcher=True" kullanılacaksa tanımlanması zorunludur. )
 + [log]
   + path : Log dosyasının oluşacağı klasörü belirtir.
   Örnek örnekleme aşağıda yer almaktadır.Sınıf, ilk parametre olarak, scriptin başında oluşturulan logger objesini bekler.eql örneklenmeden önce mutlaka loggger sınıfı örneklenmelidir.
@@ -51,7 +54,38 @@ Konfigürasyon parametreleri ve anlamları aşağıda listelenmiştir.
   eql.route_request(url)
   ```
   
-  Sistem **clustered** özelliği ile açıldığında bellekte bir sqlite tablosu oluşur ve cluster durumu burada saklanır.Eğer **watcher** özelliği açılmamışsa aktif cluster bilgisi ve cluster da yer alan sunucuların durumu bir defaya mahsuu kontrol edilir ve buraya işlenir.Bu işlemden sonra eğer bir sebepten sunucular down olursa script bundan haberdar olmayacaktır.Bu nedenle **clustered** parametresiyle birlikte **watcher** parametresini de kullanmanız önerilir.Bu parametreyle birlikte, belirlenen aralıklar sunucular kontrol edilir ve down olan sunucularınıza trafik gitmez.Ayrıca sunucu durumunuzu loglardan takip edebilirsiniz:
+  Sistem **clustered** özelliği ile açıldığında "lb_db" parametresinde yer alan dosyada sqlite tablosu oluşur ve cluster durumu burada saklanır.Eğer **watcher** özelliği açılmamışsa aktif cluster bilgisi ve cluster da yer alan sunucuların durumu bir defaya mahsuu kontrol edilir ve buraya işlenir.Bu işlemden sonra eğer bir sebepten sunucular down olursa script bundan haberdar olmayacaktır.Bu nedenle **clustered** parametresiyle birlikte **watcher** parametresini de kullanmanız önerilir.Bu parametreyle birlikte, belirlenen aralıklar sunucular kontrol edilir ve down olan sunucularınıza trafik gitmez.Ayrıca sunucu durumunuzu loglardan takip edebilirsiniz.
+
+  Yeni yaptığım güncellemede bellekte tutulan sqlite veri tabanını bir dosya olarak tutmaya karar verdim.Bunun sebebi, gunicorn kullanarak işlem başlattığım için, tüm işlem birimlerinin aynı db ye bağlanmasını sağlamak.
 
 ## Version 3.0 ( Beta )
-Uygulamaya eklenen veri merkezi özelliğiyle, tam anlamıyla bir CDN özelliği kazandırılmaya çalışılmıştır.Şuan için tasarım ve bir miktar test kodu olarak hazır olan özellik, önümüzdeki dönemlerde test edilecektir.Şuan için yapılan eklentilerin, mevcut çalışma sistemine olumsuz bir etkis
+Uygulamaya eklenen veri merkezi özelliğiyle, tam anlamıyla bir CDN özelliği kazandırılmaya çalışılmıştır.Şuan için tasarım ve bir miktar test kodu olarak hazır olan özellik, önümüzdeki dönemlerde test edilecektir.Şuan için yapılan eklentilerin, mevcut çalışma sistemine olumsuz bir etkisi yoktur.
+
+### Amaç
+Bu özelliğin uygulamaya katılmasıyla birlikte dağıtık bir yapı kurulabilir, kullanıcıların geldiği bölgerele göre ( şuan için sadece kıta olarak kontrol yapılıyor.Daha sonraları bunu daha da eleyerek bir yönlendirme yapılacak. ) en yakında bulunan veri merkezinden yanıt dönülebilir.
+
+### İşleyiş
+Belirlenecek merkez lokasyonda "router_mod" özelliğiyle modül başlatılır ve ilgili konfigürasyon dosyası düzenlenir. ( cdn.cfg ) Burada, gelen istekler bölgelere göre ayrılır ve konfig dosyasına göre ilgili veri merkezlerine yönlendirilir. ( 302 koduyla )
+
+### Konfigürasyon Dosyası
++ [env]
+  + edge_locations : Veri merkezlerinin hangi kıtalarda olduğunu belirtir.
+  + default_edge : Gelen isteğin ait olduğu bölgeye hizmet verecek bir veri merkezi olmaması halinde isteğin hangi merkezden karşılanacağını belirtir.
+  + edge_check_interval : Veri merkezlerinde bulunan sunucuların kaç saniyede bir kontrol edileceğini belirtir.
+  + continent_db : Kıta ve ülke kodlarının eşleştirildiği veri tabanı dosyasının lokasyonunu belirtir.Burada bulunan parametre aslında bir sabittir ve değiştirilmemesi tavsiye edilir.
+  + lb_db : Veri merkezlerinde bulunan sunucuların durumlarının tutulacağı veri tabanı dosyasının yolunu ve adını belirtir.
++ [<veri_merkezi_kıta_kodu>]
+  + servers : Veri merkezinde barındırılan sunuculara ait hostname yada ip bilgisi. ( burada hostname kullanmanız tavsiye edilmektedir. )
+  + timeout : Veri merkezinde barındırılan sunuculara ulaşılması sırasında isteğin ne kadar sürede zaman aşımına uğrayacağını belirtir.
+  + health_check_url : Veri merkezinde barındırılan sunuculara ait kontrol adresleridir. ( Bu adres modül içerisinde bir end point olarak verilecektir. )
+
+### Örnekleme
+Sistemin kullanılabilmesi için aşağıdaki örnekleme yeterlidir.
+
+```
+import eql
+import logMaster
+
+logger = LogMaster.Logger("rest_service_router_mode", "/EQL/source/config.cfg")
+eql = eql.EQL(logger, router_mod=True)
+```
