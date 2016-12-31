@@ -96,6 +96,8 @@ Belirlenecek merkez lokasyonda "router_mod" özelliğiyle modül başlatılır v
   + edge_check_interval : Veri merkezlerinde bulunan sunucuların kaç saniyede bir kontrol edileceğini belirtir.
   + continent_db : Kıta ve ülke kodlarının eşleştirildiği veri tabanı dosyasının lokasyonunu belirtir.Burada bulunan parametre aslında bir sabittir ve değiştirilmemesi tavsiye edilir.
   + lb_db : Veri merkezlerinde bulunan sunucuların durumlarının tutulacağı veri tabanı dosyasının yolunu ve adını belirtir.
+  + cb_host : İsteklere ait istatistik datalarının saklanacağı couchbase sunucu ip numarasıdır.
+  + statistic_bucket : İsteklere ait istatistik datalarının saklanacağı couchbase bucket ismidir.
 + [veri_merkezi_kıta_kodu]
   + servers : Veri merkezinde barındırılan sunuculara ait hostname yada ip bilgisi. ( burada hostname kullanmanız tavsiye edilmektedir. )
   + timeout : Veri merkezinde barındırılan sunuculara ulaşılması sırasında isteğin ne kadar sürede zaman aşımına uğrayacağını belirtir.
@@ -108,6 +110,10 @@ Sistemin kullanılabilmesi için aşağıdaki örnekleme yeterlidir.
 import eql
 import logMaster
 
+# Logger sınıfı
 logger = LogMaster.Logger("rest_service_router_mode", "/EQL/source/config.cfg")
+# Temel kullanım
 eql = eql.EQL(logger, router_mod=True)
+# İstatistik datasıyla birlikte kullanım
+eql = eql.EQL(logger, router_mod=True, router_mod_statistic=True)
 ```
