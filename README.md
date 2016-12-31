@@ -74,7 +74,7 @@ Belirlenecek merkez lokasyonda "router_mod" özelliğiyle modül başlatılır v
   + edge_check_interval : Veri merkezlerinde bulunan sunucuların kaç saniyede bir kontrol edileceğini belirtir.
   + continent_db : Kıta ve ülke kodlarının eşleştirildiği veri tabanı dosyasının lokasyonunu belirtir.Burada bulunan parametre aslında bir sabittir ve değiştirilmemesi tavsiye edilir.
   + lb_db : Veri merkezlerinde bulunan sunucuların durumlarının tutulacağı veri tabanı dosyasının yolunu ve adını belirtir.
-+ [<veri_merkezi_kıta_kodu>]
++ [veri_merkezi_kıta_kodu]
   + servers : Veri merkezinde barındırılan sunuculara ait hostname yada ip bilgisi. ( burada hostname kullanmanız tavsiye edilmektedir. )
   + timeout : Veri merkezinde barındırılan sunuculara ulaşılması sırasında isteğin ne kadar sürede zaman aşımına uğrayacağını belirtir.
   + health_check_url : Veri merkezinde barındırılan sunuculara ait kontrol adresleridir. ( Bu adres modül içerisinde bir end point olarak verilecektir. )
