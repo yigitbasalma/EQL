@@ -14,7 +14,7 @@ RUNDIR=$(dirname $SOCKFILE)
 test -d $RUNDIR || mkdir -p $RUNDIR
  
 # Start your gunicorn
-exec gunicorn router_main:app -b 127.0.0.1:5000 \
+exec gunicorn main:app -b 127.0.0.1:5000 \
   --name $NAME \
   --workers $NUM_WORKERS \
   --user=$USER --group=$GROUP \

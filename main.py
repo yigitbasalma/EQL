@@ -3,7 +3,7 @@
 
 import re
 
-from flask import Flask, jsonify, abort, make_response, request, send_file, Response
+from flask import Flask, jsonify, abort, make_response, request, Response
 from source import eql, LogMaster
 from werkzeug.routing import BaseConverter
 

@@ -11,12 +11,13 @@ import ConfigParser
 import couchbase
 import sqlite3
 import time
+import os
 
 import hashlib as h
 
 
 class Db(object):
-    def __init__(self,method, router_mode=False):
+    def __init__(self, method):
         self.conn = sqlite3.connect(method, check_same_thread=False)
         self.vt = self.conn.cursor()
 
@@ -47,13 +48,11 @@ class EQL(Db):
             self.default_edge = self.config.get("env", "default_edge")
             continent_db = self.config.get("env", "continent_db")
             lb_db = self.config.get("env", "lb_db")
-            self.cc_db = Db(continent_db, router_mode=True)
+            self.cc_db = Db(continent_db)
+            if os.path.exists(lb_db): os.remove(lb_db)
             Db.__init__(self, lb_db)
-            try:
-                self.write(
+            self.write(
                 "CREATE TABLE edge_status(SERVER VARCHAR(200) PRIMARY KEY,STATUS VARCHAR(50), REGION VARCHAR(5))")
-            except sqlite3.OperationalError:
-                self.write("DELETE FROM edge_status")
             check_interval = int(self.config.get("env", "edge_check_interval"))
             p = Process(target=self._health_check_edge_server, name="EQL_Watcher",
                         kwargs={"check_interval": check_interval})
@@ -62,10 +61,10 @@ class EQL(Db):
         if not router_mod:
             self.router_mod = False
             self.config.read("/EQL/source/config.cfg")
-            self.cache_bucket = Bucket("couchbase://{0}/{1}".\
+            self.cache_bucket = Bucket("couchbase://{0}/{1}".
                                        format(self.config.get("env", "cbhost"), self.config.get("env", "cache_bucket")),
                                        lockmode=2)
-            self.statistic_bucket = Bucket("couchbase://{0}/{1}".\
+            self.statistic_bucket = Bucket("couchbase://{0}/{1}".
                                            format(self.config.get("env", "cbhost"),
                                                   self.config.get("env", "statistic_bucket")), lockmode=2)
             self.server = self.config.get("env", "server")
@@ -73,12 +72,11 @@ class EQL(Db):
             self.timeout = float(self.config.get("env", "timeout"))
             self.img_file_expire = int(self.config.get("env", "img_file_expire")) * 24 * 60 * 60
         if clustered:
-            lb_file = self.condig.get("env", "lb_db")
-            Db.__init__(self, lb_file)
-            try:
-                self.write("CREATE TABLE lb(HOST VARCHAR(100) PRIMARY KEY, STATUS VARCHAR(20), WEIGHT INT(3) DEFAULT '0')")
-            except sqlite3.OperationalError:
-                self.write("DELETE FROM lb")
+            lb_db = self.config.get("env", "lb_db")
+            if os.path.exists(lb_db): os.remove(lb_db)
+            Db.__init__(self, lb_db)
+            self.write(
+                "CREATE TABLE lb(HOST VARCHAR(100) PRIMARY KEY, STATUS VARCHAR(20), WEIGHT INT(3) DEFAULT '0')")
             self.clustered = True
             self._health_check_cluster(first=True)
         if with_static:
@@ -259,9 +257,13 @@ class EQL(Db):
                         try:
                             if status == "down":
                                 self.logger.log_save("EQL", "ERROR", "{0} Sunucusu down.".format(server))
-                            self.write("INSERT INTO edge_status VALUES ('{0}', '{1}', '{2}')".format(server, status, edge_location))
+                            self.write("INSERT INTO edge_status VALUES ('{0}', '{1}', '{2}')".format(server, status,
+                                                                                                     edge_location))
                         except sqlite3.IntegrityError:
-                            self.write("UPDATE edge_status SET STATUS='{0}', REGION='{2}' WHERE SERVER='{1}'".format(status, server, edge_location))
+                            self.write(
+                                "UPDATE edge_status SET STATUS='{0}', REGION='{2}' WHERE SERVER='{1}'".format(status,
+                                                                                                              server,
+                                                                                                              edge_location))
             time.sleep(int(check_interval))
 
     def _get_best_edge(self, country_code):
