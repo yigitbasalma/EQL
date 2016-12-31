@@ -15,6 +15,28 @@ Uygulama 2 ana kabiliyet üzerine kurulmuştur.Bunlar;
 + Diskten dönülen statik içeriklerin bytearray formatında cache'de tutmak.
 Uygulama bu fonksiyonları yerine getirirken web sunucu ve backend sunucular arasında yer alacağı düşünüldüğünden, cluster bir yapı sağlamak ve yüksek erişilebilirlik için gerekli aksiyonlar da düşünülmüştür.Uygulama config dosyasında ve örnekleme sırasında verilecek parametrelerle yedekli bir yapıyla çalışabilmektedir.
 
+## Bağımlılılar
+Modülün çalışabilmesi için sistemde aşağıdaki paketlerin yüklü olması gerekmektedir.
++ flask
++ flask-httpauth
++ requests
++ couchbase ( * )
++ python-geoip-geolite2
+
+* Couchbase modülünün çalışabilmesi için aşağıdaki işlemlerin de yapılması gerekmektedir.
+```
+# RPM tabanlı sistemler için
+wget http://packages.couchbase.com/releases/couchbase-release/couchbase-release-1.0-2-x86_64.rpm
+sudo rpm -ivh couchbase-release-1.0-2-x86_64.rpm
+sudo yum install libcouchbase-devel libcouchbase2-bin gcc gcc-c++ -y
+
+# DEB tabanlı sistemler için
+wget http://packages.couchbase.com/releases/couchbase-release/couchbase-release-1.0-2-amd64.deb
+sudo dpkg -i couchbase-release-1.0-2-amd64.deb
+sudo apt-get update
+sudo apt-get install libcouchbase-dev libcouchbase2-bin build-essential
+```
+
 ## Konfigürasyon dosyası ve Örnekleme
 Konfigürasyon parametreleri ve anlamları aşağıda listelenmiştir.
 + [env]

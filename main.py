@@ -39,6 +39,11 @@ def static_cache(param):
         return Response(rsp[1], mimetype=rsp[2])
     else:
         abort(rsp[1])
+
+
+@app.route("/status")
+def app_status():
+    return Response("up", status=200)
         
 
 @app.errorhandler(404)

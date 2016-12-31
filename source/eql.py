@@ -36,13 +36,13 @@ class Db(object):
 
 
 class EQL(Db):
-    def __init__(self, logger, router_mod=False, watcher=False, clustered=False, with_static=False):
-        if router_mod:
-            if watcher or clustered or with_static:
-                raise RuntimeError("router_mod açıkken diğer modlar kullanılamaz.")
+    def __init__(self, logger, router_mod_statistic=False, router_mod=False, watcher=False, clustered=False,
+                 with_static=False):
         self.logger = logger
         self.config = ConfigParser.ConfigParser()
         if router_mod:
+            if watcher or clustered or with_static:
+                raise RuntimeError("router_mod açıkken diğer modlar kullanılamaz.")
             self.config.read("/EQL/source/cdn.cfg")
             self.edge_locations = self.config.get("env", "edge_locations").split(",")
             self.default_edge = self.config.get("env", "default_edge")
@@ -58,7 +58,15 @@ class EQL(Db):
                         kwargs={"check_interval": check_interval})
             p.start()
             self.router_mod = True
+            if router_mod_statistic:
+                self.request_statistic = Bucket("couchbase://{0}/{1}".format(self.config.get("env", "cbhost"),
+                                                                             self.config.get("env",
+                                                                                             "statistic_bucket")),
+                                                lockmode=2)
+                self.with_statistic = True
         if not router_mod:
+            if router_mod_statistic:
+                raise RuntimeError("Bu özellik sadece router_mod ile birlikte kullanılabilir.")
             self.router_mod = False
             self.config.read("/EQL/source/config.cfg")
             self.cache_bucket = Bucket("couchbase://{0}/{1}".
@@ -268,6 +276,24 @@ class EQL(Db):
                                                                                                               edge_location))
             time.sleep(int(check_interval))
 
+    def _put_statistic(self, country_code, url):
+        urls = h.md5(url)
+        try:
+            values = self.request_statistic.get(urls).value
+            count, timestamp, countries = values[0], values[1], list(values[2])
+            countries.append(country_code)
+            countries = list(set(countries))
+            count += 1
+            obj = [count, timestamp, countries]
+            self.request_statistic.replace(urls, obj)
+        except couchbase.exceptions.NotFoundError:
+            count = 1
+            countries = [country_code]
+            obj = [count, datetime.datetime.now().strftime("%Y-%m-%d %H:%I:%S"), countries]
+            self.request_statistic.insert(url, obj)
+        finally:
+            return True
+
     def _get_best_edge(self, country_code):
         request_from = self.cc_db.readt("SELECT CONTINENT FROM country_code WHERE CC='{0}'".format(country_code))[0][0]
         region = request_from if request_from in self.edge_locations else self.default_edge
@@ -275,6 +301,8 @@ class EQL(Db):
 
     def route_to_best_edge(self, url, origin_ip):
         origin = geolite2.lookup(origin_ip)
+        if self.with_statistic:
+            self._put_statistic(origin, url)
         if origin is not None:
             return True, "http://{0}/{1}".format(self._get_best_edge(origin.country), url)
         return True, "http://{0}/{1}".format(self._get_best_edge(self.default_edge), url)
